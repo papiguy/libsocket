@@ -14,7 +14,9 @@
 # include <sys/types.h>
 
 namespace poll {
+
 # include <poll.h>
+
 }
 
 # include "exception.hpp"
@@ -64,8 +66,7 @@ namespace poll {
 
 # include "socket.hpp"
 
-namespace libsocket
-{
+namespace libsocket {
     /**
      * @addtogroup libsocketplusplus
      * @{
@@ -92,29 +93,32 @@ namespace libsocket
      * `Socket::getfd()`).
      */
     template<typename SocketT>
-    class selectset
-    {
-	private:
-	    std::map<int,SocketT*> fdsockmap;  ///< A map containing the relations between the filedescriptors and the socket objects
+    class selectset {
+    private:
+        std::map<int, SocketT *> fdsockmap;  ///< A map containing the relations between the filedescriptors and the socket objects
 
-	    bool set_up; ///< Stores if the class has been initiated
-            
-            std::vector<poll::pollfd> pollfd_set; // Set of pollfd structs to poll
+        bool set_up; ///< Stores if the class has been initiated
 
-	public:
+        std::vector<poll::pollfd> pollfd_set; // Set of pollfd structs to poll
 
-	    selectset();
+    public:
 
-	    void add_fd(const SocketT& sock, int method);
+        selectset();
 
-	    std::pair<std::vector<SocketT*>, std::vector<SocketT*> > wait(long long microsecs=0);
-	    typedef std::pair<std::vector<SocketT*>, std::vector<SocketT*> > ready_socks;
+        void add_fd(const SocketT &sock, int method);
+
+        void remove_fd(const SocketT &sock, int method);
+
+        std::pair<std::vector<SocketT *>, std::vector<SocketT *> > wait(long long microsecs = 0);
+
+        typedef std::pair<std::vector<SocketT *>, std::vector<SocketT *> > ready_socks;
     };
+
     /**
      * @}
      */
 
-    extern int highestfd(const std::vector<int>& v);
+    extern int highestfd(const std::vector<int> &v);
 
     /**
      * @brief Constructor.
@@ -123,8 +127,7 @@ namespace libsocket
      */
     template<typename SockT>
     selectset<SockT>::selectset(void)
-        : set_up(false)
-    {
+            : set_up(false) {
     }
 
     /**
@@ -135,30 +138,43 @@ namespace libsocket
      *
      */
     template<typename SocketT>
-    void selectset<SocketT>::add_fd(const SocketT& sock, int method )
-    {
-	int fd = sock.getfd();
+    void selectset<SocketT>::add_fd(const SocketT &sock, int method) {
+        int fd = sock.getfd();
 
-	if ( method == LIBSOCKET_READ )
-	{
+        if (method == LIBSOCKET_READ) {
             poll::pollfd fdinfo{fd, POLLIN, 0};
             pollfd_set.push_back(fdinfo);
-	    fdsockmap[fd] = const_cast<SocketT*>(&sock);
-	    set_up = true;
+            fdsockmap[fd] = const_cast<SocketT *>(&sock);
+            set_up = true;
 
-	} else if ( method == LIBSOCKET_WRITE )
-	{
+        } else if (method == LIBSOCKET_WRITE) {
             poll::pollfd fdinfo{fd, POLLOUT, 0};
             pollfd_set.push_back(fdinfo);
-	    fdsockmap[fd] = const_cast<SocketT*>(&sock);
-	    set_up = true;
-	} else if ( method == (LIBSOCKET_READ|LIBSOCKET_WRITE) )
-	{ // don't put the fd in our data structures twice.
-            poll::pollfd fdinfo{fd, (POLLIN|POLLOUT), 0};
+            fdsockmap[fd] = const_cast<SocketT *>(&sock);
+            set_up = true;
+        } else if (method == (LIBSOCKET_READ | LIBSOCKET_WRITE)) { // don't put the fd in our data structures twice.
+            poll::pollfd fdinfo{fd, (POLLIN | POLLOUT), 0};
             pollfd_set.push_back(fdinfo);
-	    fdsockmap[fd] = const_cast<SocketT*>(&sock);
-	    set_up = true;
-	}
+            fdsockmap[fd] = const_cast<SocketT *>(&sock);
+            set_up = true;
+        }
+    }
+
+    void selectset<SocketT>::remove_fd(const SocketT& sock){
+        int fd = sock.getfd();
+
+        if (method == LIBSOCKET_READ) {
+            poll::pollfd fdinfo{fd, POLLIN, 0};
+            pollfd_set.erase(std::remove(vec.begin(), vec.end(), fdinfo), vec.end());
+        } else if (method == LIBSOCKET_WRITE) {
+            poll::pollfd fdinfo{fd, POLLOUT, 0};
+            pollfd_set.erase(std::remove(vec.begin(), vec.end(), fdinfo), vec.end());
+        } else if (method == (LIBSOCKET_READ | LIBSOCKET_WRITE)) { // don't put the fd in our data structures twice.
+            poll::pollfd fdinfo{fd, (POLLIN | POLLOUT), 0};
+            pollfd_set.erase(std::remove(vec.begin(), vec.end(), fdinfo), vec.end());
+        }
+
+        fdsockmap.erase(fd);
     }
 
     /**
@@ -173,56 +189,52 @@ namespace libsocket
      * *Hint*: Save pointers to the added objects to be able to compare and distinguish them after `wait()`.
      */
     template<typename SockT>
-    typename selectset<SockT>::ready_socks selectset<SockT>::wait(long long microsecs)
-    {
-	int n = 0;
-        
+    typename selectset<SockT>::ready_socks selectset<SockT>::wait(long long microsecs) {
+        int n = 0;
+
         struct timespec *timeout = NULL;
         struct timespec _timeout;
-        
-        if ( microsecs != 0 )
-	{
-	    timeout = &_timeout;
-        
+
+        if (microsecs != 0) {
+            timeout = &_timeout;
+
             long long nanosecs = microsecs * 1000;
             long long nanopart = nanosecs % 1000000000;
-            long long secpart  = (nanosecs - nanopart) / 1000000000;
-            
+            long long secpart = (nanosecs - nanopart) / 1000000000;
+
             _timeout.tv_sec = secpart;
             _timeout.tv_nsec = nanopart;
         }
 
-        n = ppoll((poll::pollfd *)pollfd_set.data(), pollfd_set.size(),
+        n = ppoll((poll::pollfd *) pollfd_set.data(), pollfd_set.size(),
                   timeout, NULL);
-                
-	ready_socks rwfds;
 
-	if ( n < 0 )
-	{
-	    std::string err(strerror(errno));
+        ready_socks rwfds;
 
-	    throw socket_exception(__FILE__,__LINE__,"selectset::wait(): Error at ppoll(): " + err);
+        if (n < 0) {
+            std::string err(strerror(errno));
 
-	} else if ( n == 0 ) // time is over, no filedescriptor is ready
-	{
-	    rwfds.first.resize(0);
-	    rwfds.second.resize(0);
+            throw socket_exception(__FILE__, __LINE__, "selectset::wait(): Error at ppoll(): " + err);
 
-	    return rwfds;
-	}
-        
-        std::vector<poll::pollfd>::iterator end = pollfd_set.end();
-        
-        for (std::vector<poll::pollfd>::iterator iter = pollfd_set.begin(); iter != end; ++iter)
+        } else if (n == 0) // time is over, no filedescriptor is ready
         {
+            rwfds.first.resize(0);
+            rwfds.second.resize(0);
+
+            return rwfds;
+        }
+
+        std::vector<poll::pollfd>::iterator end = pollfd_set.end();
+
+        for (std::vector<poll::pollfd>::iterator iter = pollfd_set.begin(); iter != end; ++iter) {
             if (iter->revents & POLLIN)
                 rwfds.first.push_back(fdsockmap[iter->fd]);
-            
+
             if (iter->revents & POLLOUT)
                 rwfds.second.push_back(fdsockmap[iter->fd]);
         }
 
-	return rwfds;
+        return rwfds;
     }
 
 }

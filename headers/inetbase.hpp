@@ -61,6 +61,7 @@ namespace libsocket
 
 	    const string& gethost(void) const;
 	    const string& getport(void) const;
+	    const int setsockopt(int level, int option_name, const void *option_value, socklen_t option_len);
     };
     /**
      * @}
